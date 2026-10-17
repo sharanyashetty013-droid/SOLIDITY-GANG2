@@ -1,7 +1,7 @@
 import { prs as fakePrs } from './data'
 
-// true = fake demo data, false = real backend (flip at the end)
-const USE_FAKE = true
+// true = fake demo data, false = real backend
+const USE_FAKE = false
 
 function toPr(r) {
   const findings = (r.findings || []).map((f) => ({
@@ -60,4 +60,11 @@ export async function explainPr(pr) {
   if (!res.ok) throw new Error(await readError(res))
   const data = await res.json()
   return data.text
+}
+
+export async function fetchHealth() {
+  if (USE_FAKE) return { ok: true, model: 'demo data', ai_running: true }
+  const res = await fetch('/api/health')
+  if (!res.ok) throw new Error('down')
+  return await res.json()
 }

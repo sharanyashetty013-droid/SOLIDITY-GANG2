@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { LayoutGrid, ShieldCheck, Settings, Search, Bell, X, Download, ArrowLeft } from 'lucide-react'
+import { LayoutGrid, ShieldCheck, Settings, Search, Bell, X, Download, ArrowLeft, Copy } from 'lucide-react'
 import { repos } from './data'
-import { fetchPrs, explainPr } from './api'
+import { fetchPrs, explainPr, fetchHealth } from './api'
 import { Logo } from './Logo'
 import SettingsView from './SettingsView'
 
@@ -31,6 +31,8 @@ export default function Dashboard({ onHome }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [ai, setAi] = useState({})
+  const [health, setHealth] = useState(null)
+  const [copied, setCopied] = useState(false)
   const searchRef = useRef(null)
   const count = (l) => prs.filter((p) => p.level === l).length
 
@@ -39,6 +41,10 @@ export default function Dashboard({ onHome }) {
       (filter === 'All' || p.level === filter) &&
       (p.title + ' ' + p.author + ' ' + p.id).toLowerCase().includes(query.toLowerCase())
   )
+
+  useEffect(() => {
+    fetchHealth().then(setHealth).catch(() => setHealth(null))
+  }, [])
 
   const startScan = (name) => {
     const target = typeof name === 'string' ? name : repo
@@ -98,6 +104,23 @@ export default function Dashboard({ onHome }) {
     return () => window.removeEventListener('keydown', h)
   }, [])
 
+  const copySummary = (p) => {
+    const text = p.explanation || (ai[p.id] && ai[p.id].text) || ''
+    const lines = [
+      `#${p.id} ${p.title} (${p.level}, score ${p.score})`,
+      `Author: @${p.author}`,
+      text,
+      ...p.findings.map((f) => `- ${f.file}:${f.lines} - ${f.reason}`),
+      'Advisory only. A Low score is not a guarantee of safety. The maintainer makes the final call.',
+    ].filter(Boolean)
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(lines.join('\n')).then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      })
+    }
+  }
+
   const exportMd = () => {
     const lines = [
       `# PRism report: ${repo}`,
@@ -140,6 +163,9 @@ export default function Dashboard({ onHome }) {
         <header className="top">
           <button className="home" onClick={onHome}><Logo /></button>
           <div className="actions">
+            <span className={'badge ' + (health ? 'ok' : 'off')}>
+              {health ? (health.ai_running ? 'AI ready: ' + health.model : 'Backend ready, AI offline') : 'Backend offline'}
+            </span>
             <select
               className="pill"
               value={repo}
@@ -299,6 +325,12 @@ export default function Dashboard({ onHome }) {
             <span className={'tag ' + open.level}>{open.level} · score {open.score}</span>
             <h2>#{open.id} {open.title}</h2>
             <em>@{open.author}</em>
+            {open.url && <a className="ghlink" href={open.url} target="_blank" rel="noreferrer">Open on GitHub</a>}
+            <div>
+              <button className="copybtn" onClick={() => copySummary(open)}>
+                <Copy size={13} /> {copied ? 'Copied' : 'Copy summary'}
+              </button>
+            </div>
 
             <h4>Summary</h4>
             {open.explanation && <p>{open.explanation}</p>}
@@ -315,6 +347,7 @@ export default function Dashboard({ onHome }) {
             {open.findings.map((f, i) => (
               <div key={i} className="evid">
                 <code>{f.file}:{f.lines}</code>
+                {f.snippet && <pre className="snip">{f.snippet}</pre>}
                 <p>{f.reason}</p>
                 <small>+{f.weight} points</small>
               </div>
