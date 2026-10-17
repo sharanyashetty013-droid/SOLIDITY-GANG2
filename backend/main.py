@@ -5,6 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 from fastapi import FastAPI, Header
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import github as gh
@@ -12,6 +13,7 @@ from rules import scan, score
 from explain import explain, MODEL
 
 app = FastAPI(title="First-Time PR Guard")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 CACHE, TTL = {}, 120
 STATIC = Path(__file__).parent / "static"
 STATIC.mkdir(exist_ok=True)
