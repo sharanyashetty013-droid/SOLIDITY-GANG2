@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { LayoutGrid, ShieldCheck, Settings, Search, Bell, X, Download, ArrowLeft } from 'lucide-react'
+import { LayoutGrid, ShieldCheck, Settings, Search, Bell, X, Download, ArrowLeft, Copy } from 'lucide-react'
 import { repos } from './data'
-import { fetchPrs } from './api'
+import { fetchPrs, explainPr, fetchHealth } from './api'
 import { Logo } from './Logo'
 import SettingsView from './SettingsView'
 
@@ -19,7 +19,7 @@ const scanSteps = [
 export default function Dashboard({ onHome }) {
   const [repo, setRepo] = useState(repos[0])
   const [open, setOpen] = useState(null)
-  const [phase, setPhase] = useState('idle') // idle | scanning | done
+  const [phase, setPhase] = useState('idle') // idle | scanning | done | error
   const [stepIdx, setStepIdx] = useState(0)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('All')
@@ -27,9 +27,12 @@ export default function Dashboard({ onHome }) {
   const [repoList, setRepoList] = useState(repos)
   const [url, setUrl] = useState('')
   const [urlErr, setUrlErr] = useState('')
-    const [prs, setPrs] = useState([])
+  const [prs, setPrs] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [ai, setAi] = useState({})
+  const [health, setHealth] = useState(null)
+  const [copied, setCopied] = useState(false)
   const searchRef = useRef(null)
   const count = (l) => prs.filter((p) => p.level === l).length
 
@@ -39,10 +42,15 @@ export default function Dashboard({ onHome }) {
       (p.title + ' ' + p.author + ' ' + p.id).toLowerCase().includes(query.toLowerCase())
   )
 
-   const startScan = (name) => {
+  useEffect(() => {
+    fetchHealth().then(setHealth).catch(() => setHealth(null))
+  }, [])
+
+  const startScan = (name) => {
     const target = typeof name === 'string' ? name : repo
     setOpen(null)
     setError('')
+    setAi({})
     setStepIdx(0)
     setLoading(true)
     setPhase('scanning')
@@ -52,7 +60,7 @@ export default function Dashboard({ onHome }) {
       .finally(() => setLoading(false))
   }
 
-    const scanUrl = (e) => {
+  const scanUrl = (e) => {
     e.preventDefault()
     const m = url.trim().match(/github\.com\/([^/\s]+)\/([^/\s#?]+)/)
     if (!m) { setUrlErr('Paste a GitHub link like https://github.com/owner/repo'); return }
@@ -72,12 +80,21 @@ export default function Dashboard({ onHome }) {
     }
     const t = setTimeout(() => setStepIdx((i) => i + 1), 700)
     return () => clearTimeout(t)
-    }, [phase, stepIdx, loading])
+  }, [phase, stepIdx, loading])
 
-    const goBack = () => {
+  useEffect(() => {
+    if (!open || open.explanation || open.findings.length === 0 || ai[open.id]) return
+    const id = open.id
+    setAi((a) => ({ ...a, [id]: { status: 'loading', text: '' } }))
+    explainPr(open)
+      .then((text) => setAi((a) => ({ ...a, [id]: { status: 'done', text } })))
+      .catch((e) => setAi((a) => ({ ...a, [id]: { status: 'error', text: e.message } })))
+  }, [open])
+
+  const goBack = () => {
     if (open) setOpen(null)
     else if (view === 'settings') setView('dash')
-    else if (phase === 'done') setPhase('idle')
+    else if (phase === 'done' || phase === 'error') setPhase('idle')
     else onHome()
   }
 
@@ -86,6 +103,23 @@ export default function Dashboard({ onHome }) {
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [])
+
+  const copySummary = (p) => {
+    const text = p.explanation || (ai[p.id] && ai[p.id].text) || ''
+    const lines = [
+      `#${p.id} ${p.title} (${p.level}, score ${p.score})`,
+      `Author: @${p.author}`,
+      text,
+      ...p.findings.map((f) => `- ${f.file}:${f.lines} - ${f.reason}`),
+      'Advisory only. A Low score is not a guarantee of safety. The maintainer makes the final call.',
+    ].filter(Boolean)
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(lines.join('\n')).then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      })
+    }
+  }
 
   const exportMd = () => {
     const lines = [
@@ -98,7 +132,8 @@ export default function Dashboard({ onHome }) {
       .slice()
       .sort((a, b) => b.score - a.score)
       .forEach((p) => {
-        lines.push(`## #${p.id} ${p.title} (${p.level}, score ${p.score})`, `Author: @${p.author}`, '', p.explanation, '')
+        const text = p.explanation || (ai[p.id] && ai[p.id].text) || ''
+        lines.push(`## #${p.id} ${p.title} (${p.level}, score ${p.score})`, `Author: @${p.author}`, '', text, '')
         if (p.findings.length) {
           lines.push('Evidence:')
           p.findings.forEach((f) => lines.push(`- ${f.file}:${f.lines} - ${f.reason} (+${f.weight})`))
@@ -109,12 +144,12 @@ export default function Dashboard({ onHome }) {
       })
     lines.push('---', 'Advisory only. A Low score is not a guarantee of safety. The maintainer makes the final call.')
     const blob = new Blob([lines.join('\n')], { type: 'text/markdown' })
-    const url = URL.createObjectURL(blob)
+    const href = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
+    a.href = href
     a.download = 'prism-report.md'
     a.click()
-    URL.revokeObjectURL(url)
+    URL.revokeObjectURL(href)
   }
 
   return (
@@ -128,6 +163,9 @@ export default function Dashboard({ onHome }) {
         <header className="top">
           <button className="home" onClick={onHome}><Logo /></button>
           <div className="actions">
+            <span className={'badge ' + (health ? 'ok' : 'off')}>
+              {health ? (health.ai_running ? 'AI ready: ' + health.model : 'Backend ready, AI offline') : 'Backend offline'}
+            </span>
             <select
               className="pill"
               value={repo}
@@ -137,12 +175,13 @@ export default function Dashboard({ onHome }) {
             </select>
             <button className="round" onClick={() => searchRef.current && searchRef.current.focus()}><Search size={16} /></button>
             <button className="round"><Bell size={16} /></button>
-            <button className="round dark" onClick={startScan} disabled={phase === 'scanning'}>
+            <button className="round dark" onClick={() => startScan()} disabled={phase === 'scanning'}>
               {phase === 'scanning' ? 'Scanning...' : phase === 'done' ? 'Scan again' : 'Scan'}
             </button>
           </div>
         </header>
-                {phase !== 'scanning' && (
+
+        {phase !== 'scanning' && (
           <button className="back" onClick={goBack}><ArrowLeft size={15} /> Back</button>
         )}
         {view === 'settings' && <SettingsView />}
@@ -152,7 +191,7 @@ export default function Dashboard({ onHome }) {
             <div className="empty-icon"><ShieldCheck size={30} /></div>
             <h2>Ready to scan {repo}</h2>
             <p>Pick a repo above and press Scan. We will find open PRs from first-time contributors and rank them by risk, with evidence for every flag.</p>
-                        <form className="urlbox" onSubmit={scanUrl}>
+            <form className="urlbox" onSubmit={scanUrl}>
               <input
                 className="search"
                 placeholder="Paste a GitHub repo or PR link"
@@ -163,14 +202,15 @@ export default function Dashboard({ onHome }) {
             </form>
             {urlErr && <p className="urlerr">{urlErr}</p>}
             <span className="or">or</span>
-            <button className="round dark big" onClick={startScan}>Scan {repo}</button>
+            <button className="round dark big" onClick={() => startScan()}>Scan {repo}</button>
           </section>
         )}
 
         {view === 'dash' && phase === 'scanning' && (
           <section className="card scanner">
             <h2>Scanning {repo}</h2>
-            <div className="progress"><i style={{ width: (stepIdx / scanSteps.length) * 100 + '%' }} /></div>
+            <p className="muted">Big repos can take a minute or two. Please keep this tab open.</p>
+            <div className="progress"><i style={{ width: Math.min(stepIdx / scanSteps.length, loading ? 0.95 : 1) * 100 + '%' }} /></div>
             <ul className="ssteps">
               {scanSteps.map((s, i) => (
                 <li key={s} className={i < stepIdx ? 'done' : i === stepIdx ? 'active' : ''}>
@@ -181,7 +221,24 @@ export default function Dashboard({ onHome }) {
           </section>
         )}
 
-        {view === 'dash' && phase === 'done' && (
+        {view === 'dash' && phase === 'error' && (
+          <section className="card empty">
+            <h2>We couldn't finish the scan</h2>
+            <p>{error || 'Something went wrong.'} Nothing was changed on your repo. Please check the server and try again.</p>
+            <button className="round dark big" onClick={() => startScan()}>Try again</button>
+          </section>
+        )}
+
+        {view === 'dash' && phase === 'done' && prs.length === 0 && (
+          <section className="card empty">
+            <div className="empty-icon"><ShieldCheck size={30} /></div>
+            <h2>No first-time PRs right now</h2>
+            <p>{repo} has no open pull requests from first-time contributors, so there is nothing to review here. Check back after new contributors open PRs.</p>
+            <button className="round dark big" onClick={() => setPhase('idle')}>Back to scan</button>
+          </section>
+        )}
+
+        {view === 'dash' && phase === 'done' && prs.length > 0 && (
           <>
             <p className="scanned">Scanned {repo} just now. Found {prs.length} first-time PRs.</p>
             <div className="grid">
@@ -245,7 +302,7 @@ export default function Dashboard({ onHome }) {
                             <button key={p.id} className="pr" onClick={() => setOpen(p)}>
                               <span className={'tag ' + p.level}>{p.level}</span>
                               <strong>#{p.id} {p.title}</strong>
-                              <em>@{p.author} · {p.age} ago</em>
+                              <em>@{p.author}{p.age ? ' · ' + p.age + ' ago' : ''}</em>
                               <small>{p.files} files · score {p.score} · {p.findings.length} findings</small>
                             </button>
                           ))}
@@ -268,15 +325,29 @@ export default function Dashboard({ onHome }) {
             <span className={'tag ' + open.level}>{open.level} · score {open.score}</span>
             <h2>#{open.id} {open.title}</h2>
             <em>@{open.author}</em>
+            {open.url && <a className="ghlink" href={open.url} target="_blank" rel="noreferrer">Open on GitHub</a>}
+            <div>
+              <button className="copybtn" onClick={() => copySummary(open)}>
+                <Copy size={13} /> {copied ? 'Copied' : 'Copy summary'}
+              </button>
+            </div>
 
             <h4>Summary</h4>
-            <p>{open.explanation}</p>
+            {open.explanation && <p>{open.explanation}</p>}
+            {!open.explanation && ai[open.id] && ai[open.id].status === 'loading' && (
+              <p className="muted"><span className="spin" />Writing a plain-language explanation. The first one can take up to a minute while the local model loads.</p>
+            )}
+            {!open.explanation && ai[open.id] && ai[open.id].status === 'done' && <p>{ai[open.id].text}</p>}
+            {!open.explanation && ai[open.id] && ai[open.id].status === 'error' && (
+              <p className="muted">The explanation isn't available right now ({ai[open.id].text}). The evidence below is still accurate.</p>
+            )}
 
             <h4>Evidence</h4>
             {open.findings.length === 0 && <p className="muted">No code findings. No evidence means no flag.</p>}
             {open.findings.map((f, i) => (
               <div key={i} className="evid">
                 <code>{f.file}:{f.lines}</code>
+                {f.snippet && <pre className="snip">{f.snippet}</pre>}
                 <p>{f.reason}</p>
                 <small>+{f.weight} points</small>
               </div>

@@ -274,3 +274,13 @@ html { scroll-behavior: smooth; }
 /* ===== BACK BUTTON ===== */
 .back { display: inline-flex; align-items: center; gap: 6px; background: #fff; padding: 8px 16px; border-radius: 999px; font-size: 13px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.06); transition: transform .2s, box-shadow .2s; animation: rise .3s backwards; }
 .back:hover { transform: translateX(-3px); box-shadow: 0 6px 14px rgba(0,0,0,.12); }
+
+.spin{display:inline-block;width:14px;height:14px;border:2px solid #ddd;border-top-color:#7c5cf0;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.snip{margin:6px 0;padding:8px 10px;background:#15131f;color:#e8e6f5;border-radius:8px;font-size:12px;overflow-x:auto;white-space:pre}
+.ghlink{display:inline-block;margin-left:10px;font-size:13px;color:#7c5cf0;text-decoration:underline}
+.badge{font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid #ddd;white-space:nowrap}
+.badge.ok{background:#e8f8ee;border-color:#9be8b0;color:#1f7a3d}
+.badge.off{background:#fff0f0;border-color:#f3b4b4;color:#a33}
+.copybtn{display:inline-flex;align-items:center;gap:6px;margin:10px 0 0;padding:6px 12px;border:1px solid #ddd;border-radius:999px;background:#fff;font:inherit;font-size:13px;cursor:pointer}
