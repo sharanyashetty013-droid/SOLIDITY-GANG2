@@ -274,3 +274,6 @@ html { scroll-behavior: smooth; }
 /* ===== BACK BUTTON ===== */
 .back { display: inline-flex; align-items: center; gap: 6px; background: #fff; padding: 8px 16px; border-radius: 999px; font-size: 13px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.06); transition: transform .2s, box-shadow .2s; animation: rise .3s backwards; }
 .back:hover { transform: translateX(-3px); box-shadow: 0 6px 14px rgba(0,0,0,.12); }
+
+.spin{display:inline-block;width:14px;height:14px;border:2px solid #ddd;border-top-color:#7c5cf0;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}

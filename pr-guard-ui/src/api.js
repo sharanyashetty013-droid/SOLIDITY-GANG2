@@ -1,15 +1,63 @@
-import { prs } from './data'
+import { prs as fakePrs } from './data'
 
-// Ask backend teammates for the real URL, then put it here
-const API_URL = ''
+// true = fake demo data, false = real backend (flip at the end)
+const USE_FAKE = true
+
+function toPr(r) {
+  const findings = (r.findings || []).map((f) => ({
+    file: f.file,
+    lines: String(f.line),
+    reason: f.reason,
+    weight: f.weight,
+    snippet: f.snippet || '',
+  }))
+  return {
+    id: r.number,
+    title: r.title,
+    author: r.author,
+    url: r.url,
+    level: r.level,
+    score: r.total,
+    files: new Set(findings.map((f) => f.file)).size,
+    age: '',
+    explanation: '',
+    findings,
+    trust: (r.trust && r.trust.signals) || [],
+  }
+}
+
+async function readError(res) {
+  try {
+    const j = await res.json()
+    if (j && j.detail) return typeof j.detail === 'string' ? j.detail : 'Request failed'
+  } catch (e) { /* ignore */ }
+  return 'Server returned ' + res.status
+}
 
 export async function fetchPrs(repo) {
-  if (!API_URL) {
-    // fake mode: pretend to wait, then return the fake PRs
+  if (USE_FAKE) {
     await new Promise((r) => setTimeout(r, 800))
-    return prs
+    return fakePrs
   }
-  const res = await fetch(`${API_URL}/prs?repo=${encodeURIComponent(repo)}`)
-  if (!res.ok) throw new Error('Server returned ' + res.status)
-  return await res.json()
+  const [owner, name] = repo.split('/')
+  const res = await fetch(`/api/scan/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`)
+  if (!res.ok) throw new Error(await readError(res))
+  const data = await res.json()
+  return (data.results || []).map(toPr)
+}
+
+// first call can take 30-90 s (model loading)
+export async function explainPr(pr) {
+  if (USE_FAKE) {
+    await new Promise((r) => setTimeout(r, 1200))
+    return pr.explanation
+  }
+  const res = await fetch('/api/explain', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ level: pr.level, findings: pr.findings }),
+  })
+  if (!res.ok) throw new Error(await readError(res))
+  const data = await res.json()
+  return data.text
 }
