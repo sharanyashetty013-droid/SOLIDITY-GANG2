@@ -1,30 +1,14 @@
-<!doctype html><html><head><meta charset="utf-8"><title>First-Time PR Guard</title>
-<style>body{font-family:sans-serif;max-width:800px;margin:30px auto;padding:0 12px}
-.High{color:#c0392b}.Medium{color:#d68910}.Low{color:#1e8449}
-.pr{border:1px solid #ddd;border-radius:8px;padding:10px;margin:8px 0}pre{white-space:pre-wrap;background:#f4f4f4;padding:8px}</style></head>
-<body><h2>First-Time PR Guard</h2><p>Evidence, not accusations.</p>
-<input id="r" placeholder="owner/repo or GitHub link" size="40"> <button onclick="scan()">Scan</button>
-<div id="out"></div>
-<script>
-const out=document.getElementById('out');
-function el(t,txt,c){const e=document.createElement(t);if(txt!==undefined)e.textContent=txt;if(c)e.className=c;return e}
-async function scan(){
-  out.replaceChildren(el('p','Scanning...'));
-  const [o,n]=document.getElementById('r').value.trim().replace(/^https?:\/\/(www\.)?github\.com\//,'').replace(/\.git$/,'').replace(/\/+$/,'').split('/');
-  const res=await fetch(`/api/scan/${o}/${n}`);
-  const d=await res.json();
-  out.replaceChildren();
-  if(!res.ok){out.append(el('p',d.detail||'Error'));return}
-  if(!d.results.length)out.append(el('p','No first-time PRs found.'));
-  for(const pr of d.results){
-    const b=el('div',null,'pr');
-    b.append(el('b',`#${pr.number} ${pr.title} `),el('span',pr.level,pr.level),el('div',`by ${pr.author} | score ${pr.total}`));
-    for(const f of pr.findings)b.append(el('div',`${f.file}:${f.line} ${f.reason} ${f.snippet}`));
-    for(const s of pr.trust.signals)b.append(el('small',s+'. '));
-    const btn=el('button','Explain');const ex=el('pre');
-    btn.onclick=async()=>{ex.textContent='Thinking...';
-      const r=await fetch('/api/explain',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level:pr.level,findings:pr.findings})});
-      ex.textContent=(await r.json()).text};
-    b.append(el('br'),btn,ex);out.append(b)}
-}
-</script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pr-guard-ui</title>
+    <script type="module" crossorigin src="/assets/index-Be-0M-bO.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-C1e6O99r.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
