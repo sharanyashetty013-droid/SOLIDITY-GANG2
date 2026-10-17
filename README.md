@@ -46,9 +46,6 @@ ollama pull qwen2.5-coder
 
 Change `MODEL_NAME` in `.env` to switch models.
 
-## Try it
-
-`vercel/next.js` (has High-risk PRs) or `freeCodeCamp/freeCodeCamp` (mostly Low).
 
 ## Limits
 
