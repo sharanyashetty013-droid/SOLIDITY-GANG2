@@ -1,0 +1,11 @@
+# Likely questions and short answers
+- **Does the AI decide the risk?** No. Fixed rules set the score, so the same PR gets the same result. The AI only explains the evidence.
+- **What if the AI makes things up?** It only sees the findings and must cite file:line. The evidence list is always shown beside it.
+- **Does code leave the machine?** No. The model runs locally with Ollama. Only the GitHub API is called for PR data.
+- **How is it different from a code reviewer / CodeQL?** Those check quality or bugs for everyone. We answer one question: how much to trust a stranger's first PR, using risky code plus light contributor context, without accusing anyone.
+- **Does it accuse people?** No. Wording is "worth a closer look". Trust signals alone never flag a PR; a new account with a clean small change stays Low.
+- **False positives?** One weak signal stays Low, every flag shows proof, and the maintainer makes the final call.
+- **Can it be fooled?** Yes. A Low score is not a guarantee. It saves review time, it does not replace review.
+- **Many companies / rate limits?** Each user can send their own GitHub token per request; results are cached 2 minutes. A GitHub App is the future step.
+- **Does it monitor all the time?** No, it scans on demand. A GitHub Action that comments on new first-time PRs is future scope.
+- **Typosquat check?** It compares new package names with ~40 popular ones and flags names one letter away. The list can be extended.
